@@ -104,10 +104,20 @@
       btn.innerHTML = btn.dataset.label;
     }
   }
-
   var state = { apiKey: null, keyIdentifier: null, servers: [], selected: {} };
+  function resetWizardState() {
+    var abandonedId = state.keyIdentifier;
+    state.apiKey = null;
+    state.keyIdentifier = null;
+    state.servers = [];
+    state.selected = {};
+    if (abandonedId) {
+      api('DELETE', '/api/client/account/api-keys/' + encodeURIComponent(abandonedId)).catch(function () {});
+    }
+  }
 
   function stepWarning() {
+    resetWizardState();
     var m = openModal(
       '<h2>Add to CTRLServers</h2>' +
       '<p>CTRLServers requires a Pterodactyl Client API key to manage your servers.</p>' +
@@ -228,19 +238,30 @@
       msg.innerHTML = '<div class="cs-err">Select at least one server.</div>';
       return;
     }
+    var activeKey = state.apiKey;
+    if (!activeKey || activeKey.indexOf('ptlc_') !== 0) {
+      msg.innerHTML = '<div class="cs-err">Import session expired. Please close and start again to create a fresh API key.</div>';
+      return;
+    }
     setBusy(btn, true, 'Sending to CTRLServers…');
     var panelUrl = window.location.origin;
     var payload = {
       type: 'pterodactyl',
-      panel: { url: panelUrl, apiKey: state.apiKey },
+      panel: { url: panelUrl, apiKey: activeKey },
       servers: chosen.map(function (s) {
         return {
           identifier: s.identifier, uuid: s.uuid, name: s.name,
           description: s.description, node: s.node, limits: s.limits,
-          panelUrl: panelUrl, apiKey: state.apiKey,
+          panelUrl: panelUrl, apiKey: activeKey,
         };
       }),
     };
+    if (payload.panel.apiKey !== activeKey ||
+        !payload.servers.every(function (s) { return s.apiKey === activeKey; })) {
+      setBusy(btn, false);
+      msg.innerHTML = '<div class="cs-err">Key mismatch detected. Payload was not sent. Please restart the import.</div>';
+      return;
+    }
     fetch(DESKTOP_ENDPOINT, {
       method: 'POST',
       mode: 'cors',
@@ -253,6 +274,9 @@
         if (!res.ok) throw new Error('bad payload');
         var count = (res.body && res.body.count) || chosen.length;
         state.apiKey = null;
+        state.keyIdentifier = null;
+        state.servers = [];
+        state.selected = {};
         m.innerHTML = '<h2>Done</h2><div class="cs-ok">Servers sent to CTRLServers successfully. (' + count + ' received)</div>' +
           '<div class="cs-row"><button class="cs-btn cs-btn-primary" data-x="ok">Close</button></div>';
         m.querySelector('[data-x="ok"]').onclick = closeModal;
