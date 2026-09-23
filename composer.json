@@ -1,0 +1,35 @@
+{
+    "name": "ctrlservers/pterodactyl-extension",
+    "description": "CTRLServers Desktop integration for the Pterodactyl client dashboard: export servers to the local CTRLServers app via 127.0.0.1:12747.",
+    "type": "library",
+    "license": "MIT",
+    "homepage": "https://github.com/CTRLServers/pterodactyl-extension",
+    "keywords": ["pterodactyl", "ctrlservers", "laravel", "client-api"],
+    "authors": [
+        {
+            "name": "CTRLServers",
+            "homepage": "https://github.com/CTRLServers"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "illuminate/support": "^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "CTRLServers\\PterodactylExtension\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "CTRLServers\\PterodactylExtension\\CTRLServersServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
