@@ -48,11 +48,14 @@ so no browser security is disabled. Binding stays on `127.0.0.1`, never `0.0.0.0
 
 ```bash
 composer config repositories.ctrlservers vcs https://github.com/CTRLServers/pterodactyl-extension
-composer require ctrlservers/pterodactyl-extension
+composer require ctrlservers/pterodactyl-extension:dev-main
 php artisan ctrlservers:install
+php artisan optimize:clear
 ```
 
 If the package is already on Packagist, the first line is unnecessary.
+The script is injected into `resources/views/templates/wrapper.blade.php` (client wrapper only,
+never the admin layout). No frontend rebuild is needed since this is a plain JS asset, not React.
 
 ## Uninstall / revert
 

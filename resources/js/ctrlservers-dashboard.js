@@ -16,12 +16,7 @@
 
   function isClientDashboard() {
     var path = window.location.pathname || '/';
-    if (path.indexOf('/admin') === 0) return false;
-    if (path !== '/' && path !== '/dashboard' && !/^\/account/.test(path)) {
-      // Only inject on the main client dashboard.
-      if (path !== '/') return false;
-    }
-    return true;
+    return path === '/' || path === '/dashboard';
   }
 
   function styles() {
@@ -127,9 +122,11 @@
       setBusy(go, true, 'Creating API key…');
       api('POST', '/api/client/account/api-keys', { description: KEY_DESCRIPTION, allowed_ips: [] })
         .then(function (data) {
-          state.apiKey = (data && data.meta && data.meta.secret_token) || '';
-          state.keyIdentifier = (data && data.attributes && data.attributes.identifier) || null;
-          if (!state.apiKey) throw new Error('No secret returned');
+          var identifier = (data && data.attributes && data.attributes.identifier) || '';
+          var secret = (data && data.meta && data.meta.secret_token) || '';
+          if (!identifier || !secret) throw new Error('No secret returned');
+          state.keyIdentifier = identifier;
+          state.apiKey = identifier + secret;
           stepShowKey();
         })
         .catch(function () {
@@ -267,20 +264,44 @@
       });
   }
 
-  function injectButton() {
-    if (!isClientDashboard()) return;
-    var anchor =
-      document.querySelector('[data-testid="server-list"]') ||
-      document.querySelector('#app main h1, #app h1');
-    if (!anchor) return;
-    if (document.getElementById('ctrlservers-add-btn')) return;
-    var btn = el('<button id="ctrlservers-add-btn" class="cs-btn" type="button">Add to CTRLServers</button>');
-    btn.addEventListener('click', stepWarning);
-    if (anchor.tagName === 'H1') {
-      anchor.parentElement.appendChild(btn);
-    } else {
-      anchor.parentElement.insertBefore(btn, anchor);
+  function removeButton() {
+    var wrap = document.getElementById('ctrlservers-toolbar');
+    if (wrap) wrap.remove();
+  }
+
+  function findListContainer() {
+    var row = document.querySelector('a[href^="/server/"]');
+    if (row && row.parentElement) return row.parentElement;
+    var paras = document.querySelectorAll('p');
+    for (var i = 0; i < paras.length; i++) {
+      if (/no (other )?servers/i.test(paras[i].textContent || '')) return paras[i].parentElement;
     }
+    return null;
+  }
+
+  function syncButton() {
+    if (!isClientDashboard()) {
+      removeButton();
+      return;
+    }
+    var container = findListContainer();
+    if (!container) {
+      removeButton();
+      return;
+    }
+    if (document.getElementById('ctrlservers-toolbar')) {
+      var cur = document.getElementById('ctrlservers-toolbar');
+      if (cur.parentElement !== container) {
+        container.insertBefore(cur, container.firstChild);
+      }
+      return;
+    }
+    var wrap = el(
+      '<div id="ctrlservers-toolbar" style="display:flex;justify-content:flex-end;margin-bottom:12px">' +
+      '<button id="ctrlservers-add-btn" class="cs-btn" type="button">Add to CTRLServers</button></div>'
+    );
+    wrap.querySelector('#ctrlservers-add-btn').addEventListener('click', stepWarning);
+    container.insertBefore(wrap, container.firstChild);
   }
 
   function boot() {
@@ -289,9 +310,22 @@
       if (cfg && cfg.desktopEndpoint) DESKTOP_ENDPOINT = cfg.desktopEndpoint;
       if (cfg && cfg.keyDescription) KEY_DESCRIPTION = cfg.keyDescription;
     }).catch(function () {});
-    injectButton();
-    var obs = new MutationObserver(function () { injectButton(); });
+    syncButton();
+    var obs = new MutationObserver(function () { syncButton(); });
     obs.observe(document.documentElement, { childList: true, subtree: true });
+    var push = history.pushState;
+    var replace = history.replaceState;
+    history.pushState = function () {
+      var r = push.apply(this, arguments);
+      syncButton();
+      return r;
+    };
+    history.replaceState = function () {
+      var r = replace.apply(this, arguments);
+      syncButton();
+      return r;
+    };
+    window.addEventListener('popstate', syncButton);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

@@ -22,9 +22,10 @@ class InstallCommand extends Command
         ]);
 
         $layouts = $this->findLayouts();
+        $this->removeLegacyInjections();
 
         if (empty($layouts)) {
-            $this->warn('No Blade layout containing </body> was found. Publish manually: copy resources/js/ctrlservers-dashboard.js to public/vendor/ctrlservers/ and add the script tag to your layout.');
+            $this->warn('Client wrapper resources/views/templates/wrapper.blade.php was not found. Publish manually: copy the package resources/js/ctrlservers-dashboard.js to public/vendor/ctrlservers/ and add the script tag before </body> in the client wrapper.');
             return self::SUCCESS;
         }
 
@@ -63,37 +64,44 @@ class InstallCommand extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * The client React app is rendered through resources/views/templates/wrapper.blade.php
+     * (React root via templates such as base/core.blade.php). The admin panel uses
+     * resources/views/layouts/admin.blade.php and must never receive this script.
+     */
+    private const CLIENT_WRAPPER = 'views/templates/wrapper.blade.php';
+
+    private const LEGACY_LAYOUTS = [
+        'views/layouts/admin.blade.php',
+    ];
+
     /** @return string[] */
     private function findLayouts(): array
     {
-        $candidates = [
-            resource_path('views/layouts/app.blade.php'),
-            resource_path('views/layouts/admin.blade.php'),
-            resource_path('views/layouts/base.blade.php'),
-        ];
-
-        $found = [];
-        foreach ($candidates as $path) {
-            if (File::exists($path)) {
-                $found[] = $path;
-            }
-        }
-        if (empty($found) && File::isDirectory(resource_path('views'))) {
-            foreach (File::allFiles(resource_path('views')) as $file) {
-                if ($file->getExtension() !== 'php') {
-                    continue;
-                }
-                $path = $file->getPathname();
-                if (!str_ends_with($path, '.blade.php')) {
-                    continue;
-                }
-                $contents = File::get($path);
-                if (str_contains($contents, '</body>') && str_contains($contents, '<html')) {
-                    $found[] = $path;
-                }
-            }
+        $wrapper = resource_path(self::CLIENT_WRAPPER);
+        if (File::exists($wrapper)) {
+            return [$wrapper];
         }
 
-        return array_values(array_unique($found));
+        $this->warn('Expected client wrapper not found: ' . $wrapper . '. No fallback scan is performed; refusing to guess.');
+
+        return [];
+    }
+
+    private function removeLegacyInjections(): void
+    {
+        foreach (self::LEGACY_LAYOUTS as $relative) {
+            $path = resource_path($relative);
+            if (!File::exists($path)) {
+                continue;
+            }
+            $contents = File::get($path);
+            if (!str_contains($contents, self::MARKER)) {
+                continue;
+            }
+            File::put($path . '.ctrlservers.bak', $contents);
+            File::put($path, str_replace(self::SNIPPET, '', $contents));
+            $this->info("Removed legacy injection: {$path} (backup at {$path}.ctrlservers.bak)");
+        }
     }
 }
