@@ -43,9 +43,16 @@
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      .ctrlservers-add { display:flex; justify-content:flex-end; margin:0 0 12px; }
-      .ctrlservers-add button, .ctrlservers-modal button { border:1px solid rgba(255,255,255,.14); border-radius:4px; padding:8px 12px; background:#252a32; color:#f3f4f6; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
-      .ctrlservers-add button:hover, .ctrlservers-modal button:hover { background:#343b46; }
+      .ctrlservers-control-row { display:flex!important; flex-wrap:wrap!important; align-items:center!important; justify-content:flex-end!important; row-gap:8px; }
+      .ctrlservers-add { display:flex; align-items:center; flex:0 0 auto; margin-right:12px; }
+      .ctrlservers-add--standalone { justify-content:flex-end; margin:0 0 12px; }
+      .ctrlservers-add button { display:inline-flex; align-items:center; gap:8px; min-height:34px; padding:7px 14px; border:0; border-radius:999px; background:#3b82f6; color:#fff; font:inherit; font-size:13px; font-weight:600; white-space:nowrap; cursor:pointer; transition:background-color .15s ease; }
+      .ctrlservers-add button:hover { background:#2563eb; }
+      .ctrlservers-add button:active { background:#1d4ed8; }
+      .ctrlservers-add button:focus-visible { outline:2px solid #93c5fd; outline-offset:2px; }
+      .ctrlservers-add-icon { width:16px; height:16px; flex:none; }
+      .ctrlservers-modal button { border:1px solid rgba(255,255,255,.14); border-radius:4px; padding:8px 12px; background:#252a32; color:#f3f4f6; font:inherit; font-size:13px; font-weight:600; cursor:pointer; }
+      .ctrlservers-modal button:hover { background:#343b46; }
       .ctrlservers-modal button.primary { background:#2563eb; border-color:#2563eb; }
       .ctrlservers-modal button:disabled { opacity:.55; cursor:wait; }
       .ctrlservers-overlay { position:fixed; inset:0; z-index:9999; display:flex; align-items:center; justify-content:center; padding:16px; background:rgba(0,0,0,.68); }
@@ -61,8 +68,19 @@
       .ctrlservers-error, .ctrlservers-done { margin-top:12px; padding:10px 12px; border-radius:4px; font-size:13px; }
       .ctrlservers-error { border:1px solid rgba(239,68,68,.45); background:rgba(239,68,68,.1); color:#fecaca; }
       .ctrlservers-done { border:1px solid rgba(34,197,94,.4); background:rgba(34,197,94,.1); color:#bbf7d0; }
+      @media (max-width:640px) {
+        .ctrlservers-control-row { justify-content:flex-start!important; }
+      }
     `;
     document.head.appendChild(style);
+  }
+
+  function serverControls() {
+    const label = Array.from(document.querySelectorAll('p')).find(node =>
+      /^showing (?:your|others?'?) servers$/i.test((node.textContent || '').trim().replace(/\s+/g, ' '))
+    );
+    const row = label?.parentElement;
+    return row?.querySelector('input[type="checkbox"]') ? { row, label } : null;
   }
 
   function serverList() {
@@ -76,7 +94,9 @@
   }
 
   function removeButton() {
-    document.getElementById('ctrlservers-add')?.remove();
+    const toolbar = document.getElementById('ctrlservers-add');
+    toolbar?.parentElement?.classList.remove('ctrlservers-control-row');
+    toolbar?.remove();
   }
 
   function syncButton() {
@@ -85,8 +105,9 @@
       return;
     }
 
-    const list = serverList();
-    if (!list) {
+    const controls = serverControls();
+    const list = controls ? null : serverList();
+    if (!controls && !list) {
       removeButton();
       return;
     }
@@ -98,10 +119,41 @@
       toolbar.className = 'ctrlservers-add';
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = 'Add to CTRLServers';
+      const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      icon.setAttribute('viewBox', '0 0 16 16');
+      icon.setAttribute('aria-hidden', 'true');
+      icon.classList.add('ctrlservers-add-icon');
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', '8');
+      circle.setAttribute('cy', '8');
+      circle.setAttribute('r', '6.25');
+      circle.setAttribute('fill', 'none');
+      circle.setAttribute('stroke', 'currentColor');
+      circle.setAttribute('stroke-width', '1.5');
+      const plus = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      plus.setAttribute('d', 'M8 4.5v7M4.5 8h7');
+      plus.setAttribute('stroke', 'currentColor');
+      plus.setAttribute('stroke-width', '1.5');
+      plus.setAttribute('stroke-linecap', 'round');
+      icon.append(circle, plus);
+      const label = document.createElement('span');
+      label.textContent = 'Add to CTRLServers';
+      button.append(icon, label);
       button.addEventListener('click', startWizard);
       toolbar.appendChild(button);
     }
+
+    if (controls) {
+      controls.row.classList.add('ctrlservers-control-row');
+      toolbar.classList.remove('ctrlservers-add--standalone');
+      if (toolbar.parentElement !== controls.row || toolbar.nextElementSibling !== controls.label) {
+        controls.row.insertBefore(toolbar, controls.label);
+      }
+      return;
+    }
+
+    toolbar.parentElement?.classList.remove('ctrlservers-control-row');
+    toolbar.classList.add('ctrlservers-add--standalone');
     if (toolbar.parentElement !== list.parentElement || toolbar.nextElementSibling !== list) {
       list.parentElement?.insertBefore(toolbar, list);
     }

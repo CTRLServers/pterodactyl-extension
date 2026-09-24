@@ -2,8 +2,9 @@
 
 namespace CTRLServers\PterodactylExtension;
 
-use CTRLServers\PterodactylExtension\Http\Controllers\ExtensionConfigController;
 use CTRLServers\PterodactylExtension\Console\InstallCommand;
+use CTRLServers\PterodactylExtension\Console\ReinstallCommand;
+use CTRLServers\PterodactylExtension\Http\Controllers\ExtensionConfigController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -25,7 +26,10 @@ class CTRLServersServiceProvider extends ServiceProvider
         ], 'ctrlservers-config');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([InstallCommand::class]);
+            $this->commands([
+                InstallCommand::class,
+                ReinstallCommand::class,
+            ]);
         }
 
         Route::middleware(['web', 'auth'])->get(

@@ -17,6 +17,16 @@ php artisan optimize:clear
 
 The install command publishes the JavaScript asset and adds one script tag to `resources/views/templates/wrapper.blade.php`. It does not inject into the admin layout. The command removes the old CTRLServers tag from `resources/views/layouts/admin.blade.php` if a previous install left one there.
 
+## Update
+
+Once the extension is installed, update it from GitHub and republish its files with:
+
+```sh
+php artisan ctrlservers:reinstall
+```
+
+The command updates `ctrlservers/pterodactyl-extension` through Composer, reruns the installer, and clears the panel cache.
+
 ## Remove
 
 ```sh
