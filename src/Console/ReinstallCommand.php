@@ -23,7 +23,7 @@ class ReinstallCommand extends Command
         }
 
         $this->info('Downloading the latest CTRLServers extension...');
-        if (!$this->runCommand([
+        if (!$this->runChildProcess([
             ...$this->composerCommand(),
             'update',
             self::PACKAGE,
@@ -62,7 +62,7 @@ class ReinstallCommand extends Command
 
     private function runArtisan(string $command): bool
     {
-        return $this->runCommand([
+        return $this->runChildProcess([
             PHP_BINARY,
             base_path('artisan'),
             $command,
@@ -70,7 +70,7 @@ class ReinstallCommand extends Command
         ]);
     }
 
-    private function runCommand(array $command): bool
+    private function runChildProcess(array $command): bool
     {
         try {
             $process = new Process($command, base_path());
