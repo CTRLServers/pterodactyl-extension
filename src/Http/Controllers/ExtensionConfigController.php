@@ -11,8 +11,7 @@ class ExtensionConfigController extends Controller
     {
         return response()->json([
             'desktopEndpoint' => config('ctrlservers.desktop_endpoint', 'http://127.0.0.1:12747/accept-servers'),
-            'keyDescription' => config('ctrlservers.key_description', 'CTRLServers Desktop'),
-            'version' => '1.0.0',
+            'keyDescription' => config('ctrlservers.key_description', 'CTRLServers Desktop Integration'),
         ]);
     }
 }

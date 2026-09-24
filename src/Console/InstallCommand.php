@@ -7,101 +7,96 @@ use Illuminate\Support\Facades\File;
 
 class InstallCommand extends Command
 {
-    protected $signature = 'ctrlservers:install {--revert : Remove the injected script tag and restore backups}';
+    protected $signature = 'ctrlservers:install {--revert : Restore the client wrapper backup}';
 
-    protected $description = 'Inject (or revert) the CTRLServers dashboard script into the Pterodactyl panel layout';
+    protected $description = 'Install or remove the CTRLServers client dashboard script';
 
-    private const SNIPPET = '<script src="/vendor/ctrlservers/ctrlservers-dashboard.js" defer></script>';
-    private const MARKER = 'ctrlservers-dashboard';
+    private const SCRIPT = '<script src="/vendor/ctrlservers/ctrlservers-dashboard.js" defer></script>';
+    private const CLIENT_WRAPPER = 'views/templates/wrapper.blade.php';
+    private const OLD_ADMIN_LAYOUT = 'views/layouts/admin.blade.php';
 
     public function handle(): int
     {
-        $this->call('vendor:publish', [
-            '--tag' => 'ctrlservers-assets',
-            '--force' => true,
-        ]);
+        $wrapper = resource_path(self::CLIENT_WRAPPER);
+        $adminLayout = resource_path(self::OLD_ADMIN_LAYOUT);
 
-        $layouts = $this->findLayouts();
-        $this->removeLegacyInjections();
-
-        if (empty($layouts)) {
-            $this->warn('Client wrapper resources/views/templates/wrapper.blade.php was not found. Publish manually: copy the package resources/js/ctrlservers-dashboard.js to public/vendor/ctrlservers/ and add the script tag before </body> in the client wrapper.');
+        if ($this->option('revert')) {
+            $this->restore($wrapper);
+            $this->restore($adminLayout, true);
+            File::delete(public_path('vendor/ctrlservers/ctrlservers-dashboard.js'));
             return self::SUCCESS;
         }
 
-        foreach ($layouts as $layout) {
-            $contents = File::get($layout);
-
-            if ($this->option('revert')) {
-                $restored = str_replace(self::SNIPPET, '', $contents);
-                $backup = $layout . '.ctrlservers.bak';
-                if (File::exists($backup)) {
-                    File::put($layout, File::get($backup));
-                    File::delete($backup);
-                    $this->info("Reverted: {$layout} (backup restored)");
-                } else {
-                    File::put($layout, $restored);
-                    $this->info("Reverted: {$layout}");
-                }
-                continue;
-            }
-
-            if (str_contains($contents, self::MARKER)) {
-                $this->info("Already installed: {$layout}");
-                continue;
-            }
-
-            if (!str_contains($contents, '</body>')) {
-                $this->warn("Skipped (no </body>): {$layout}");
-                continue;
-            }
-
-            File::put($layout . '.ctrlservers.bak', $contents);
-            File::put($layout, str_replace('</body>', self::SNIPPET . "\n</body>", $contents));
-            $this->info("Installed: {$layout} (backup at {$layout}.ctrlservers.bak)");
+        if (!File::exists($wrapper)) {
+            $this->error("Client wrapper not found: {$wrapper}");
+            return self::FAILURE;
         }
 
+        if ($this->call('vendor:publish', ['--tag' => 'ctrlservers-assets', '--force' => true]) !== self::SUCCESS) {
+            return self::FAILURE;
+        }
+
+        $this->removeOldAdminInjection($adminLayout);
+        $contents = File::get($wrapper);
+        if (str_contains($contents, 'ctrlservers-dashboard.js')) {
+            $this->info('Already installed in the client wrapper.');
+            return self::SUCCESS;
+        }
+        if (!str_contains($contents, '</body>')) {
+            $this->error('The client wrapper has no closing </body> tag.');
+            return self::FAILURE;
+        }
+
+        $this->backup($wrapper, $contents);
+        File::put($wrapper, str_replace('</body>', self::SCRIPT . "\n</body>", $contents));
+        $this->info("Installed in {$wrapper}");
         return self::SUCCESS;
     }
 
-    /**
-     * The client React app is rendered through resources/views/templates/wrapper.blade.php
-     * (React root via templates such as base/core.blade.php). The admin panel uses
-     * resources/views/layouts/admin.blade.php and must never receive this script.
-     */
-    private const CLIENT_WRAPPER = 'views/templates/wrapper.blade.php';
-
-    private const LEGACY_LAYOUTS = [
-        'views/layouts/admin.blade.php',
-    ];
-
-    /** @return string[] */
-    private function findLayouts(): array
+    private function removeOldAdminInjection(string $path): void
     {
-        $wrapper = resource_path(self::CLIENT_WRAPPER);
-        if (File::exists($wrapper)) {
-            return [$wrapper];
+        if (!File::exists($path)) {
+            return;
         }
 
-        $this->warn('Expected client wrapper not found: ' . $wrapper . '. No fallback scan is performed; refusing to guess.');
+        $contents = File::get($path);
+        if (!str_contains($contents, 'ctrlservers-dashboard.js')) {
+            return;
+        }
 
-        return [];
+        $this->backup($path, $contents);
+        File::put($path, str_replace(self::SCRIPT, '', $contents));
+        $this->warn('Removed the old script injection from the admin layout.');
     }
 
-    private function removeLegacyInjections(): void
+    private function backup(string $path, string $contents): void
     {
-        foreach (self::LEGACY_LAYOUTS as $relative) {
-            $path = resource_path($relative);
-            if (!File::exists($path)) {
-                continue;
-            }
-            $contents = File::get($path);
-            if (!str_contains($contents, self::MARKER)) {
-                continue;
-            }
-            File::put($path . '.ctrlservers.bak', $contents);
-            File::put($path, str_replace(self::SNIPPET, '', $contents));
-            $this->info("Removed legacy injection: {$path} (backup at {$path}.ctrlservers.bak)");
+        $backup = $path . '.ctrlservers.bak';
+        if (!File::exists($backup)) {
+            File::put($backup, $contents);
         }
+    }
+
+    private function restore(string $path, bool $removeScript = false): void
+    {
+        $backup = $path . '.ctrlservers.bak';
+        if (!File::exists($backup)) {
+            if (File::exists($path)) {
+                $contents = File::get($path);
+                if ($removeScript) {
+                    $contents = str_replace(self::SCRIPT, '', $contents);
+                }
+                File::put($path, $contents);
+            }
+            return;
+        }
+
+        $contents = File::get($backup);
+        if ($removeScript) {
+            $contents = str_replace(self::SCRIPT, '', $contents);
+        }
+        File::put($path, $contents);
+        File::delete($backup);
+        $this->info("Restored {$path}");
     }
 }

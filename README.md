@@ -1,73 +1,38 @@
 # CTRLServers Pterodactyl Extension
 
-Adds an **Add to CTRLServers** button to the Pterodactyl **client** dashboard (`/`, never `/admin/*`).
-A wizard creates a Pterodactyl **client** API key (`ptlc_…`, description `CTRLServers Desktop Integration`)
-via the existing core route `POST /api/client/account/api-keys`, lets the user pick servers from the
-existing core route `GET /api/client`, and POSTs them to the local CTRLServers Desktop app at
-`http://127.0.0.1:12747/accept-servers`.
+Adds an **Add to CTRLServers** action to the Pterodactyl client dashboard. The extension uses the signed-in user's Client API to create a `ptlc_` key, choose servers, and send them to the CTRLServers desktop app at `http://127.0.0.1:12747/accept-servers`.
 
-No core files are modified by hand. Pterodactyl core has no supported client-dashboard extension slot,
-so `php artisan ctrlservers:install` performs a **reversible** one-line `<script>` injection into the
-panel Blade layout (backup `*.ctrlservers.bak`, `--revert` restores). All server/key logic reuses core APIs.
+The key stays in the browser's memory during the wizard. CTRLServers receives it over the local endpoint and stores it for later panel requests. A key created by a cancelled import is deleted when the wizard closes; a successful import leaves the key in Pterodactyl.
 
-## Payload sent to Desktop (POST 127.0.0.1:12747/accept-servers)
+## Install
 
-```json
-{
-  "type": "pterodactyl",
-  "panel": { "url": "https://panel.example.com", "apiKey": "ptlc_…" },
-  "servers": [
-    { "identifier": "abc123", "uuid": "full-uuid", "name": "Survival",
-      "description": "", "node": "", "limits": {},
-      "panelUrl": "https://panel.example.com", "apiKey": "ptlc_…" }
-  ]
-}
-```
+From the Pterodactyl panel directory:
 
-Identifiers come from the Client API (`attributes.identifier` short ID + `attributes.uuid` full UUID);
-the Desktop accepts either. `panelUrl`/`apiKey` are duplicated per server because the Desktop
-normalizer reads per-server fields (with `panel.*` as fallback).
-
-## CORS / localhost requirements (Desktop side, already implemented in CTRLServers app `electron.cjs`)
-
-The browser page (https) calling `http://127.0.0.1:12747` triggers CORS + Private Network Access preflight.
-The Desktop answers `OPTIONS /accept-servers` with `204` plus:
-
-```
-Access-Control-Allow-Origin: *
-Access-Control-Allow-Methods: POST, OPTIONS
-Access-Control-Allow-Headers: Content-Type
-Access-Control-Max-Age: 86400
-```
-
-and includes `Access-Control-Allow-Origin: *` on POST responses. The extension sends a plain
-`fetch(url, { mode: 'cors' })` with only `Content-Type: application/json` (no credentials),
-so no browser security is disabled. Binding stays on `127.0.0.1`, never `0.0.0.0`.
-
-## Install (from panel root)
-
-```bash
+```sh
 composer config repositories.ctrlservers vcs https://github.com/CTRLServers/pterodactyl-extension
 composer require ctrlservers/pterodactyl-extension:dev-main
 php artisan ctrlservers:install
 php artisan optimize:clear
 ```
 
-If the package is already on Packagist, the first line is unnecessary.
-The script is injected into `resources/views/templates/wrapper.blade.php` (client wrapper only,
-never the admin layout). No frontend rebuild is needed since this is a plain JS asset, not React.
+The install command publishes the JavaScript asset and adds one script tag to `resources/views/templates/wrapper.blade.php`. It does not inject into the admin layout. The command removes the old CTRLServers tag from `resources/views/layouts/admin.blade.php` if a previous install left one there.
 
-## Uninstall / revert
+## Remove
 
-```bash
+```sh
 php artisan ctrlservers:install --revert
 composer remove ctrlservers/pterodactyl-extension
 ```
 
-## Security notes
+Revert restores the wrapper backup, removes the old admin injection if present, and deletes the published JavaScript asset.
 
-- Secret (`meta.secret_token`) kept in JS memory only, never localStorage/URL/logs; cleared after handoff.
-- Cancelling after key creation DELETEs the unused key.
-- Existing keys' secrets cannot be recovered — a new key is created each run.
-- Key is POSTed only to `127.0.0.1:12747`, never to cloud hosts.
-- Client key only (`ptlc_`); no admin/Application API usage.
+## Configuration
+
+The optional `config/ctrlservers.php` file sets the local endpoint and the description shown for newly created API keys:
+
+```dotenv
+CTRLSERVERS_DESKTOP_ENDPOINT=http://127.0.0.1:12747/accept-servers
+CTRLSERVERS_KEY_DESCRIPTION=CTRLServers Desktop Integration
+```
+
+The desktop listener binds to `127.0.0.1`. The browser request uses CORS preflight and sends the key only to that local endpoint.

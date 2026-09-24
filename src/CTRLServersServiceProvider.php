@@ -2,6 +2,7 @@
 
 namespace CTRLServers\PterodactylExtension;
 
+use CTRLServers\PterodactylExtension\Http\Controllers\ExtensionConfigController;
 use CTRLServers\PterodactylExtension\Console\InstallCommand;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -29,7 +30,7 @@ class CTRLServersServiceProvider extends ServiceProvider
 
         Route::middleware(['web', 'auth'])->get(
             '/ctrlservers-extension/config',
-            [Http\Controllers\ExtensionConfigController::class, 'show']
+            [ExtensionConfigController::class, 'show']
         )->name('ctrlservers.config');
     }
 }
